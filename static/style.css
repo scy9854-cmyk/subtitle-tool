@@ -1,0 +1,77 @@
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  margin: 0;
+  padding: 32px 16px;
+}
+.wrap { max-width: 720px; margin: 0 auto; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.sub { color: #6e6e73; margin: 0 0 24px; font-size: 14px; }
+
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.tabBtn {
+  flex: 1;
+  padding: 10px 0;
+  border: 1px solid #d2d2d7;
+  background: #fff;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #1d1d1f;
+}
+.tabBtn.active { background: #1d1d1f; color: #fff; border-color: #1d1d1f; }
+
+.tabPane { display: none; background: #fff; border: 1px solid #e5e5ea; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+.tabPane.active { display: block; }
+
+label { font-size: 13px; color: #6e6e73; display: block; margin-bottom: 8px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+input, select {
+  padding: 10px 12px;
+  border: 1px solid #d2d2d7;
+  border-radius: 8px;
+  font-size: 14px;
+  flex: 1;
+  min-width: 80px;
+}
+button {
+  padding: 10px 16px;
+  border: none;
+  background: #0071e3;
+  color: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+button:hover { background: #0077ed; }
+button:disabled { background: #a1a1a6; cursor: not-allowed; }
+
+.status { margin-top: 10px; font-size: 13px; color: #d70015; min-height: 18px; }
+.status.loading { color: #6e6e73; }
+
+.results { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+.resultItem {
+  padding: 10px 12px;
+  border: 1px solid #e5e5ea;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.resultItem:hover { background: #f5f5f7; }
+.resultItem .t { font-weight: 600; }
+.resultItem .a { color: #6e6e73; }
+
+.resultBox { background: #fff; border: 1px solid #e5e5ea; border-radius: 12px; overflow: hidden; }
+.resultHeader {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 16px; border-bottom: 1px solid #e5e5ea; font-size: 13px; color: #6e6e73;
+}
+.resultHeader button { padding: 6px 12px; font-size: 12px; }
+#resultArea {
+  width: 100%; min-height: 360px; border: none; padding: 16px;
+  font-family: "SF Mono", Menlo, monospace; font-size: 14px; line-height: 1.7;
+  resize: vertical; outline: none;
+}

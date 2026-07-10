@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>예배 자막 소스 도구</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>예배 자막 소스 도구</h1>
+  <p class="sub">이지워십용 자막 소스를 자동으로 다듬습니다.</p>
+
+  <div class="tabs">
+    <button class="tabBtn active" data-tab="hymn">찬송가</button>
+    <button class="tabBtn" data-tab="ccm">CCM</button>
+    <button class="tabBtn" data-tab="bible">성경</button>
+  </div>
+
+  <section id="tab-hymn" class="tabPane active">
+    <label>찬송가 장 번호</label>
+    <div class="row">
+      <input type="number" id="hymnNumber" placeholder="예) 400" min="1" max="645">
+      <button id="hymnGoBtn">가져오기</button>
+    </div>
+    <div class="status" id="hymnStatus"></div>
+  </section>
+
+  <section id="tab-ccm" class="tabPane">
+    <label>CCM 곡 제목 검색</label>
+    <div class="row">
+      <input type="text" id="ccmQuery" placeholder="예) 선한 능력으로">
+      <button id="ccmSearchBtn">검색</button>
+    </div>
+    <div id="ccmResults" class="results"></div>
+    <div class="status" id="ccmStatus"></div>
+  </section>
+
+  <section id="tab-bible" class="tabPane">
+    <label>책 / 장 / 절 범위</label>
+    <div class="row">
+      <select id="bibleBook"></select>
+      <input type="number" id="bibleChapter" placeholder="장" min="1" style="width:70px">
+      <input type="number" id="bibleStart" placeholder="시작절" min="1" style="width:80px">
+      <span>-</span>
+      <input type="number" id="bibleEnd" placeholder="끝절" min="1" style="width:80px">
+      <button id="bibleGoBtn">가져오기</button>
+    </div>
+    <div class="status" id="bibleStatus"></div>
+  </section>
+
+  <div class="resultBox">
+    <div class="resultHeader">
+      <span>결과</span>
+      <button id="copyBtn">복사</button>
+    </div>
+    <textarea id="resultArea" placeholder="여기에 결과가 표시됩니다." spellcheck="false"></textarea>
+  </div>
+</div>
+<script>
+window.BOOKS = {{ books|tojson }};
+</script>
+<script src="/static/script.js"></script>
+</body>
+</html>

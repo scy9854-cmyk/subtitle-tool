@@ -1,0 +1,119 @@
+from __future__ import annotations
+
+import json
+import os
+import anthropic
+
+import rule_formatter
+
+MODEL = "claude-sonnet-5"
+
+HYMN_SYSTEM_PROMPT = """당신은 한국 교회의 예배 자막(이지워십) 담당자를 돕는 도우미입니다.
+찬송가 가사를 아래 규칙에 따라 정확히 다듬어 출력하세요.
+
+규칙:
+1. 가사를 화면에 2줄씩 보기 좋게 나눕니다. 한 번에 표시되는 2줄 묶음은 의미가 자연스럽게 끊기는 지점으로 나눕니다.
+2. 2줄 묶음과 그 다음 2줄 묶음 사이에는 빈 줄을 하나 넣어 구분합니다.
+3. 절이 여러 개면, 각 절이 끝날 때마다 후렴을 그대로(동일하게) 반복해서 넣습니다. 후렴도 2줄 단위로 나누고 빈 줄로 구분합니다. 즉 "1절 → 후렴 → 2절 → 후렴 → 3절 → 후렴..." 순서입니다.
+4. 각 절의 첫 줄 맨 앞에 "1. ", "2. ", "3. "처럼 절 번호를 붙입니다(예: "1. 험한 시험 물 속에서 나를 건져주시고"). 그 절의 둘째 줄에는 번호를 붙이지 않습니다. 후렴에는 번호나 "후렴"이라는 라벨을 붙이지 않고 가사만 씁니다.
+5. "아멘"이 원문에 있으면 그 절(혹은 후렴) 뒤에 별도의 한 줄로 유지합니다.
+6. 다른 설명, 머리말, 코드블록 없이 결과 텍스트만 출력합니다."""
+
+CCM_SYSTEM_PROMPT = """당신은 한국 교회의 예배 자막(이지워십) 담당자를 돕는 도우미입니다.
+CCM 가사는 절 구분이 되어 있지 않은 경우가 많습니다. 주어진 원문 가사를 의미 단위로 분석해서
+Verse 1, Verse 2, Pre-Chorus, Chorus, Bridge, Outro 등 곡 구조를 판단하고,
+structure_lyrics 도구를 호출해서 결과를 알려주세요.
+
+규칙:
+1. 각 섹션의 lines에는 그 섹션에 해당하는 원문 가사 줄들을 원래 순서 그대로 넣습니다. 줄을 2줄/4줄 단위로 미리 묶거나 나누지 마세요 — 원문의 한 줄 = 배열의 한 항목입니다.
+2. 이 결과는 자막 소스이므로, 노래에서 같은 Chorus(또는 같은 Verse)가 여러 번 반복되더라도 딱 한 번만 섹션으로 포함합니다. 처음 등장하는 곳에서만 넣고, 이후 반복되는 곳은 통째로 생략합니다.
+3. sections 배열의 순서는 곡에 실제로 처음 등장하는 순서를 따릅니다."""
+
+CCM_TOOL = {
+    "name": "structure_lyrics",
+    "description": "분석한 곡 구조를 섹션별로 반환합니다.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "sections": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "label": {
+                            "type": "string",
+                            "description": "예: Verse 1, Chorus, Bridge, Outro",
+                        },
+                        "lines": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "이 섹션에 속하는 원문 가사 줄들 (원래 순서대로, 나누지 않음)",
+                        },
+                    },
+                    "required": ["label", "lines"],
+                },
+            }
+        },
+        "required": ["sections"],
+    },
+}
+
+
+def _extract_text(resp) -> str:
+    parts = [block.text for block in resp.content if getattr(block, "type", None) == "text"]
+    return "".join(parts).strip()
+
+
+def _client() -> anthropic.Anthropic:
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY가 설정되어 있지 않습니다. .env 파일에 키를 추가해주세요."
+        )
+    return anthropic.Anthropic(api_key=api_key)
+
+
+def format_hymn(title: str, verses: list, refrain: str | None) -> str:
+    lines = [f"[{title}]"]
+    for i, v in enumerate(verses, 1):
+        lines.append(f"{i}절: {v}")
+    if refrain:
+        lines.append(f"후렴: {refrain}")
+    user_content = "\n".join(lines)
+
+    client = _client()
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=4000,
+        system=HYMN_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_content}],
+    )
+    return _extract_text(resp)
+
+
+def format_ccm(title: str, lyrics: str) -> str:
+    user_content = f"[{title}]\n\n{lyrics}"
+
+    client = _client()
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=4000,
+        system=CCM_SYSTEM_PROMPT,
+        tools=[CCM_TOOL],
+        tool_choice={"type": "tool", "name": "structure_lyrics"},
+        messages=[{"role": "user", "content": user_content}],
+    )
+
+    tool_use = next(b for b in resp.content if getattr(b, "type", None) == "tool_use")
+    sections = tool_use.input.get("sections", [])
+    if isinstance(sections, str):
+        # occasionally the model double-encodes this field as a JSON string
+        parsed = json.loads(sections)
+        sections = parsed.get("sections", parsed) if isinstance(parsed, dict) else parsed
+
+    blocks = [
+        f"{sec['label']}\n{rule_formatter.group_lines(sec['lines'])}"
+        for sec in sections
+        if sec.get("lines")
+    ]
+    return "\n\n".join(blocks)
