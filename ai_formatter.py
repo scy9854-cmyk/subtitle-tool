@@ -5,6 +5,9 @@ import os
 import anthropic
 
 import rule_formatter
+import scrapers
+import formatters
+from bible_books import BOOKS
 
 MODEL = "claude-sonnet-5"
 
@@ -89,6 +92,49 @@ AD_TOOL = {
             }
         },
         "required": ["items"],
+    },
+}
+
+
+SERMON_SYSTEM_PROMPT = """당신은 한국 교회의 설교 원고를 예배 자막 소스로 정리하는 도우미입니다.
+목사님이 작성한 설교 스크립트 원문을 줄 단위로 분석해서 segment_sermon 도구를 호출해주세요.
+
+원문은 이미 줄바꿈으로 구분되어 있습니다. 그 줄 구분을 그대로 존중하세요 — 원문의 한 줄(빈 줄 제외) = 결과의 한 항목입니다. 문장을 임의로 합치거나 다시 나누지 마세요.
+
+각 줄을 다음 세 종류 중 하나로 분류하세요:
+1. "text" — 일반 설교 본문 줄
+2. "image" — '#'으로 시작하는 이미지 자료 표시 줄
+3. "reference" — 그 줄이 다른 설명 없이 온전히 성경 구절 참조만 담고 있는 경우 (예: "요한복음 3:16", "롬 8:28-30", "삼상 15장"). 이 경우 book에는 아래 정식 책 이름 목록 중 정확히 일치하는 이름을, chapter에는 장 번호를, startVerse/endVerse에는 절 범위를 넣습니다. 특정 절 없이 장 전체를 가리키면 startVerse=1, endVerse=999로 설정하세요. 절이 하나면 startVerse와 endVerse를 같은 값으로 하세요.
+
+모든 항목에 content 필드를 넣어서 원문 그 줄의 텍스트를 그대로 보존하세요 (reference로 분류한 경우에도 원문 참조 표기를 content에 넣어두면, 나중에 조회가 실패했을 때 대체용으로 씁니다).
+
+정식 책 이름 목록: {book_list}
+
+빈 줄은 결과에 포함하지 마세요."""
+
+SERMON_TOOL = {
+    "name": "segment_sermon",
+    "description": "설교 원고를 줄 단위로 분류해서 순서대로 반환합니다.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "segments": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "type": {"type": "string", "enum": ["text", "image", "reference"]},
+                        "content": {"type": "string", "description": "원문 그 줄의 텍스트"},
+                        "book": {"type": "string", "description": "reference일 때: 정식 책 이름"},
+                        "chapter": {"type": "integer", "description": "reference일 때: 장 번호"},
+                        "startVerse": {"type": "integer", "description": "reference일 때: 시작 절"},
+                        "endVerse": {"type": "integer", "description": "reference일 때: 끝 절"},
+                    },
+                    "required": ["type", "content"],
+                },
+            }
+        },
+        "required": ["segments"],
     },
 }
 
@@ -184,4 +230,43 @@ def format_ad(image_b64: str, media_type: str) -> str:
         f"{item['number']}. {(item.get('title') or '').strip()}\n{(item.get('content') or '').strip()}"
         for item in items
     ]
+    return "\n\n".join(blocks)
+
+
+def format_sermon(raw_text: str) -> str:
+    book_list = ", ".join(name for name, _ in BOOKS)
+    system = SERMON_SYSTEM_PROMPT.format(book_list=book_list)
+
+    client = _client()
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=4000,
+        system=system,
+        tools=[SERMON_TOOL],
+        tool_choice={"type": "tool", "name": "segment_sermon"},
+        messages=[{"role": "user", "content": raw_text}],
+    )
+
+    tool_use = next(b for b in resp.content if getattr(b, "type", None) == "tool_use")
+    segments = tool_use.input.get("segments", [])
+    if isinstance(segments, str):
+        # occasionally the model double-encodes this field as a JSON string
+        parsed = json.loads(segments)
+        segments = parsed.get("segments", parsed) if isinstance(parsed, dict) else parsed
+
+    blocks = []
+    for seg in segments:
+        content = (seg.get("content") or "").strip()
+        if seg.get("type") == "reference" and seg.get("book") and seg.get("chapter"):
+            try:
+                start = int(seg.get("startVerse") or 1)
+                end = int(seg.get("endVerse") or start)
+                data = scrapers.fetch_bible(seg["book"], int(seg["chapter"]), start, end)
+                blocks.append(formatters.format_bible(data))
+                continue
+            except Exception:
+                pass  # fall back to the raw reference text below
+        if content:
+            blocks.append(content)
+
     return "\n\n".join(blocks)

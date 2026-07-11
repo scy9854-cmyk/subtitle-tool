@@ -52,6 +52,17 @@ button:disabled { background: #a1a1a6; cursor: not-allowed; }
 .status { margin-top: 10px; font-size: 13px; color: #d70015; min-height: 18px; }
 .status.loading { color: #6e6e73; }
 
+.sermonInput {
+  width: 100%;
+  min-height: 200px;
+  border: 1px solid #d2d2d7;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+
 .dropZone {
   border: 2px dashed #d2d2d7;
   border-radius: 10px;

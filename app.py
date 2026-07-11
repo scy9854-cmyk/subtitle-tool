@@ -111,6 +111,22 @@ def api_ad():
         return jsonify({"error": f"처리 중 오류가 발생했습니다: {e}"}), 500
 
 
+@app.post("/api/sermon")
+def api_sermon():
+    body = request.get_json(force=True)
+    text = (body.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "설교 스크립트를 붙여넣어주세요."}), 400
+
+    try:
+        result = ai_formatter.format_sermon(text)
+        return jsonify({"result": result, "mode": "ai"})
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": f"처리 중 오류가 발생했습니다: {e}"}), 500
+
+
 @app.post("/api/bible")
 def api_bible():
     body = request.get_json(force=True)

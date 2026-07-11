@@ -167,6 +167,21 @@ document.getElementById("adGoBtn").addEventListener("click", async () => {
   }
 });
 
+// Sermon script
+document.getElementById("sermonGoBtn").addEventListener("click", async () => {
+  const text = document.getElementById("sermonInput").value.trim();
+  if (!text) return setStatus("sermonStatus", "설교 스크립트를 붙여넣어주세요.");
+  setStatus("sermonStatus", "정리 중... (성경구절 조회가 있으면 시간이 좀 걸릴 수 있습니다)", true);
+  resultArea.value = "";
+  try {
+    const data = await postJSON("/api/sermon", { text });
+    resultArea.value = data.result;
+    setStatus("sermonStatus", "완료");
+  } catch (e) {
+    setStatus("sermonStatus", e.message);
+  }
+});
+
 // Copy
 document.getElementById("copyBtn").addEventListener("click", () => {
   if (!resultArea.value) return;
