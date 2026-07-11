@@ -105,6 +105,70 @@ document.getElementById("bibleGoBtn").addEventListener("click", async () => {
   }
 });
 
+// Ad (announcement image -> text)
+let adImage = null; // { base64, mediaType }
+
+function loadAdImageFromFile(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = reader.result;
+    adImage = { base64: dataUrl.split(",")[1], mediaType: file.type };
+    const preview = document.getElementById("adPreview");
+    preview.src = dataUrl;
+    preview.style.display = "block";
+    document.getElementById("adDropHint").style.display = "none";
+    setStatus("adStatus", "");
+  };
+  reader.readAsDataURL(file);
+}
+
+const adDropZone = document.getElementById("adDropZone");
+const adFileInput = document.getElementById("adFileInput");
+
+document.getElementById("adFilePickLink").addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  adFileInput.click();
+});
+
+adFileInput.addEventListener("change", () => {
+  if (adFileInput.files[0]) loadAdImageFromFile(adFileInput.files[0]);
+});
+
+adDropZone.addEventListener("paste", (e) => {
+  const item = [...e.clipboardData.items].find(i => i.type.startsWith("image/"));
+  if (item) loadAdImageFromFile(item.getAsFile());
+});
+
+adDropZone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  adDropZone.classList.add("dragOver");
+});
+adDropZone.addEventListener("dragleave", () => adDropZone.classList.remove("dragOver"));
+adDropZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  adDropZone.classList.remove("dragOver");
+  if (e.dataTransfer.files[0]) loadAdImageFromFile(e.dataTransfer.files[0]);
+});
+
+document.getElementById("adGoBtn").addEventListener("click", async () => {
+  const number = document.getElementById("adNumber").value;
+  if (!number) return setStatus("adStatus", "광고 번호를 입력해주세요.");
+  if (!adImage) return setStatus("adStatus", "이미지를 먼저 붙여넣거나 선택해주세요.");
+  setStatus("adStatus", "변환 중...", true);
+  resultArea.value = "";
+  try {
+    const data = await postJSON("/api/ad", {
+      number, image: adImage.base64, mediaType: adImage.mediaType,
+    });
+    resultArea.value = data.result;
+    setStatus("adStatus", "완료");
+  } catch (e) {
+    setStatus("adStatus", e.message);
+  }
+});
+
 // Copy
 document.getElementById("copyBtn").addEventListener("click", () => {
   if (!resultArea.value) return;

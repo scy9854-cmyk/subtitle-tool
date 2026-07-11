@@ -52,6 +52,20 @@ button:disabled { background: #a1a1a6; cursor: not-allowed; }
 .status { margin-top: 10px; font-size: 13px; color: #d70015; min-height: 18px; }
 .status.loading { color: #6e6e73; }
 
+.dropZone {
+  border: 2px dashed #d2d2d7;
+  border-radius: 10px;
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  color: #6e6e73;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.dropZone:focus { outline: none; border-color: #0071e3; background: #f5f9ff; }
+.dropZone.dragOver { border-color: #0071e3; background: #f5f9ff; }
+.dropZone img { max-width: 100%; max-height: 260px; border-radius: 6px; display: block; margin: 0 auto; }
+
 .results { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
 .resultItem {
   padding: 10px 12px;

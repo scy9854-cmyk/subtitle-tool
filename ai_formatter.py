@@ -59,6 +59,28 @@ CCM_TOOL = {
 }
 
 
+AD_SYSTEM_PROMPT = """당신은 한국 교회의 주보 광고/공지 이미지를 자막 소스로 옮기는 도우미입니다.
+주어진 이미지(주보의 광고란을 캡처한 사진)를 읽고 extract_announcement 도구를 호출해서 결과를 알려주세요.
+
+규칙:
+1. title에는 그 광고의 짧은 제목만 넣습니다 (예: "환영인사", "청년부 여름 수련회 안내"). 이미지에 이미 번호가 적혀 있어도 title에는 번호를 넣지 않습니다.
+2. content에는 이미지 속 본문 내용을 그대로 옮깁니다. 장식용 기호나 이모지는 빼고 핵심 텍스트만 담되, 일시/장소/문의처처럼 원래 줄이 나뉘어 있던 정보는 줄바꿈을 유지합니다.
+3. 이미지를 그대로 옮기기만 하세요 — 없는 내용을 추측해서 채우지 않습니다."""
+
+AD_TOOL = {
+    "name": "extract_announcement",
+    "description": "이미지에서 읽어낸 광고/공지의 제목과 본문을 반환합니다.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "광고 제목 (번호 제외)"},
+            "content": {"type": "string", "description": "광고 본문 내용"},
+        },
+        "required": ["title", "content"],
+    },
+}
+
+
 def _extract_text(resp) -> str:
     parts = [block.text for block in resp.content if getattr(block, "type", None) == "text"]
     return "".join(parts).strip()
@@ -117,3 +139,33 @@ def format_ccm(title: str, lyrics: str) -> str:
         if sec.get("lines")
     ]
     return "\n\n".join(blocks)
+
+
+def format_ad(number: int, image_b64: str, media_type: str) -> str:
+    client = _client()
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=1000,
+        system=AD_SYSTEM_PROMPT,
+        tools=[AD_TOOL],
+        tool_choice={"type": "tool", "name": "extract_announcement"},
+        messages=[{
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": media_type, "data": image_b64},
+                },
+                {"type": "text", "text": "이 광고 이미지에서 제목과 본문을 추출해주세요."},
+            ],
+        }],
+    )
+
+    tool_use = next(b for b in resp.content if getattr(b, "type", None) == "tool_use")
+    data = tool_use.input
+    if isinstance(data, str):
+        data = json.loads(data)
+
+    title = (data.get("title") or "").strip()
+    content = (data.get("content") or "").strip()
+    return f"{number}. {title}\n{content}"

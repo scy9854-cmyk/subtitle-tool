@@ -94,6 +94,28 @@ def api_ccm_lyrics():
         return jsonify({"error": f"처리 중 오류가 발생했습니다: {e}"}), 500
 
 
+@app.post("/api/ad")
+def api_ad():
+    body = request.get_json(force=True)
+    try:
+        number = int(body.get("number"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "광고 번호를 숫자로 입력해주세요."}), 400
+
+    image_b64 = body.get("image")
+    media_type = body.get("mediaType") or "image/png"
+    if not image_b64:
+        return jsonify({"error": "이미지를 첨부해주세요."}), 400
+
+    try:
+        result = ai_formatter.format_ad(number, image_b64, media_type)
+        return jsonify({"result": result, "mode": "ai"})
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": f"처리 중 오류가 발생했습니다: {e}"}), 500
+
+
 @app.post("/api/bible")
 def api_bible():
     body = request.get_json(force=True)
