@@ -153,14 +153,12 @@ adDropZone.addEventListener("drop", (e) => {
 });
 
 document.getElementById("adGoBtn").addEventListener("click", async () => {
-  const number = document.getElementById("adNumber").value;
-  if (!number) return setStatus("adStatus", "광고 번호를 입력해주세요.");
   if (!adImage) return setStatus("adStatus", "이미지를 먼저 붙여넣거나 선택해주세요.");
   setStatus("adStatus", "변환 중...", true);
   resultArea.value = "";
   try {
     const data = await postJSON("/api/ad", {
-      number, image: adImage.base64, mediaType: adImage.mediaType,
+      image: adImage.base64, mediaType: adImage.mediaType,
     });
     resultArea.value = data.result;
     setStatus("adStatus", "완료");

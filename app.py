@@ -97,18 +97,13 @@ def api_ccm_lyrics():
 @app.post("/api/ad")
 def api_ad():
     body = request.get_json(force=True)
-    try:
-        number = int(body.get("number"))
-    except (TypeError, ValueError):
-        return jsonify({"error": "광고 번호를 숫자로 입력해주세요."}), 400
-
     image_b64 = body.get("image")
     media_type = body.get("mediaType") or "image/png"
     if not image_b64:
         return jsonify({"error": "이미지를 첨부해주세요."}), 400
 
     try:
-        result = ai_formatter.format_ad(number, image_b64, media_type)
+        result = ai_formatter.format_ad(image_b64, media_type)
         return jsonify({"result": result, "mode": "ai"})
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 500
