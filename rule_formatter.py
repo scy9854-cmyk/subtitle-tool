@@ -8,11 +8,10 @@ reliably detect a Bridge.
 """
 
 
-MAX_LINE_CHARS = 18  # screen-calibrated hard ceiling for multi-line wraps
-SEGMENT_SOFT_MAX = 20  # a clean natural-segment 2-line split may run slightly over MAX_LINE_CHARS
+MAX_LINE_CHARS = 20  # screen-calibrated hard ceiling: longer lines overflow the subtitle slide
 
 
-def split_two_lines(text: str, prefix: str = "", max_chars: int = SEGMENT_SOFT_MAX):
+def split_two_lines(text: str, prefix: str = "", max_chars: int = MAX_LINE_CHARS):
     """Balance-split text into exactly two lines at the best word boundary.
     Returns None if even the best balance point leaves a line over max_chars
     -- the caller should fall back to wrap_line (possibly multiple groups)
