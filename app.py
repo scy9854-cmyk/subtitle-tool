@@ -1,10 +1,20 @@
 import os
+import sys
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+if getattr(sys, "frozen", False):
+    # PyInstaller unpacks templates/static into a temp dir (sys._MEIPASS);
+    # .env has to live beside the actual .exe instead, since that's the
+    # only location that (a) persists across runs and (b) the user can
+    # actually find and edit.
+    ASSET_DIR = sys._MEIPASS
+    APP_DIR = os.path.dirname(sys.executable)
+else:
+    ASSET_DIR = APP_DIR = os.path.dirname(os.path.abspath(__file__))
+os.chdir(APP_DIR)
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(os.path.join(APP_DIR, ".env"))
 
 import anthropic
 from flask import Flask, jsonify, render_template, request, Response
@@ -15,7 +25,7 @@ import rule_formatter
 import scrapers
 from bible_books import BOOKS
 
-app = Flask(__name__, root_path=os.path.dirname(os.path.abspath(__file__)))
+app = Flask(__name__, root_path=ASSET_DIR)
 
 APP_PASSWORD = os.environ.get("APP_PASSWORD")
 
