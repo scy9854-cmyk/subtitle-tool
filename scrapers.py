@@ -22,6 +22,7 @@ def fetch_hymn(number: int) -> dict:
     if not title_el:
         raise ScrapeError(f"{number}장을 찾을 수 없습니다.")
     title = re.sub(r"\s+", " ", title_el.get_text(strip=True))
+    title = re.sub(r"(찬송가)(\d)", r"\1 \2", title)  # site prints "새찬송가400장" with no space
 
     body = soup.select_one(".textSpacing")
     if not body:
