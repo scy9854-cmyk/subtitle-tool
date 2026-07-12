@@ -8,7 +8,37 @@ reliably detect a Bridge.
 """
 
 
-MAX_LINE_CHARS = 18  # screen-calibrated: longer lines overflow the subtitle slide
+MAX_LINE_CHARS = 18  # screen-calibrated hard ceiling for multi-line wraps
+SEGMENT_SOFT_MAX = 20  # a clean natural-segment 2-line split may run slightly over MAX_LINE_CHARS
+
+
+def split_two_lines(text: str, prefix: str = "", max_chars: int = SEGMENT_SOFT_MAX):
+    """Balance-split text into exactly two lines at the best word boundary.
+    Returns None if even the best balance point leaves a line over max_chars
+    -- the caller should fall back to wrap_line (possibly multiple groups)
+    for text that doesn't comfortably fit in two lines."""
+    words = text.split()
+    if not words:
+        return None
+    if len(words) == 1:
+        line = f"{prefix}{words[0]}"
+        return [line] if len(line) <= max_chars else None
+
+    lengths = [len(w) for w in words]
+    plen = len(prefix)
+    total = sum(lengths) + (len(words) - 1) + plen  # prefix counts toward line1's share
+    best_i, best_diff = 1, float("inf")
+    for i in range(1, len(words)):
+        left = plen + sum(lengths[:i]) + (i - 1)
+        diff = abs(left - (total - left))
+        if diff < best_diff:
+            best_diff, best_i = diff, i
+
+    line1 = f"{prefix}{' '.join(words[:best_i])}"
+    line2 = " ".join(words[best_i:])
+    if len(line1) <= max_chars and len(line2) <= max_chars:
+        return [line1, line2]
+    return None
 
 
 def wrap_line(text: str, max_chars: int = MAX_LINE_CHARS, prefix: str = "") -> list:
@@ -44,13 +74,28 @@ def pair_lines(lines: list) -> list:
     return ["\n".join(lines[i:i + 2]) for i in range(0, len(lines), 2)]
 
 
+def segment_to_lines(seg: str, prefix: str = "") -> list:
+    """A natural segment (one of the hymn site's own <br/>-separated pieces)
+    is kept to exactly two lines whenever that fits within SEGMENT_SOFT_MAX;
+    only a segment too long for a clean 2-line split falls back to the
+    stricter multi-line hard wrap."""
+    return split_two_lines(seg, prefix=prefix) or wrap_line(seg, prefix=prefix)
+
+
 def format_hymn_rule(verses: list, refrain) -> str:
+    """verses is a list of verses, each itself a list of that verse's original
+    segments; refrain is one such segment list or None."""
+    refrain_blocks = []
+    if refrain:
+        for seg in refrain:
+            refrain_blocks.extend(pair_lines(segment_to_lines(seg)))
+
     blocks = []
-    for i, v in enumerate(verses, 1):
-        wrapped = wrap_line(v, prefix=f"{i}. ")
-        blocks.extend(pair_lines(wrapped))
-        if refrain:
-            blocks.extend(pair_lines(wrap_line(refrain)))
+    for i, segments in enumerate(verses, 1):
+        for j, seg in enumerate(segments):
+            prefix = f"{i}. " if j == 0 else ""
+            blocks.extend(pair_lines(segment_to_lines(seg, prefix)))
+        blocks.extend(refrain_blocks)
     return "\n\n".join(blocks)
 
 

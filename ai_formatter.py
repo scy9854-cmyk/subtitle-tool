@@ -168,55 +168,68 @@ def _client() -> anthropic.Anthropic:
 
 
 def format_hymn(verses: list, refrain) -> str:
-    """AI picks natural word-order breaks for each verse, but every resulting
-    line is verified to fit MAX_LINE_CHARS -- if the AI's split (or the call
-    itself) fails that check for a given verse, that verse falls back to the
-    deterministic mechanical wrap instead. A screen overflow must never reach
-    production. The refrain is always mechanically wrapped (unchanged, fixed
-    18-char width) since it's short enough that natural-break splitting adds
-    no value and only risks over-fragmenting it."""
-    user_content = "\n".join(f"{i}절: {v}" for i, v in enumerate(verses, 1))
+    """Each verse is a list of the hymn site's own natural <br/>-separated
+    segments. A segment that fits a clean, safely-sized 2-line balance split
+    (rule_formatter.split_two_lines) uses that directly -- deterministic and
+    stable. Only a segment too long for that (needs 3+ lines) is sent to the
+    AI for a natural word-order split, and even then every returned line is
+    re-verified against MAX_LINE_CHARS; a segment that fails validation, or
+    any failure of the AI call itself, falls back to the mechanical wrap.
+    The refrain never goes through the AI -- always the deterministic path."""
+    needs_ai = []  # (verse_idx, seg_idx, text, prefix)
+    for i, segments in enumerate(verses):
+        for j, seg in enumerate(segments):
+            prefix = f"{i + 1}. " if j == 0 else ""
+            if rule_formatter.split_two_lines(seg, prefix=prefix) is None:
+                needs_ai.append((i, j, seg, prefix))
 
-    ai_verses = []
-    try:
-        client = _client()
-        resp = client.messages.create(
-            model=MODEL,
-            max_tokens=4000,
-            system=HYMN_SYSTEM_PROMPT,
-            tools=[HYMN_TOOL],
-            tool_choice={"type": "tool", "name": "split_hymn"},
-            messages=[{"role": "user", "content": user_content}],
-        )
-        tool_use = next(b for b in resp.content if getattr(b, "type", None) == "tool_use")
-        data = tool_use.input
-        if isinstance(data, str):
-            data = json.loads(data)
-        ai_verses = data.get("verses") or []
-    except RuntimeError:
-        raise  # no API key -- let the caller fall back to rule_formatter entirely
-    except Exception:
-        pass  # any other AI/parsing failure -- proceed with mechanical wrap below
+    ai_results = {}
+    if needs_ai:
+        try:
+            client = _client()
+            user_content = "\n".join(f"{idx}: {text}" for idx, (_, _, text, _) in enumerate(needs_ai))
+            resp = client.messages.create(
+                model=MODEL,
+                max_tokens=4000,
+                system=HYMN_SYSTEM_PROMPT,
+                tools=[HYMN_TOOL],
+                tool_choice={"type": "tool", "name": "split_hymn"},
+                messages=[{"role": "user", "content": user_content}],
+            )
+            tool_use = next(b for b in resp.content if getattr(b, "type", None) == "tool_use")
+            data = tool_use.input
+            if isinstance(data, str):
+                data = json.loads(data)
+            ai_list = data.get("verses") or []
+            for idx, item in enumerate(ai_list):
+                if idx >= len(needs_ai):
+                    break
+                vi, si, seg, prefix = needs_ai[idx]
+                candidate = [ln.strip() for ln in (item.get("lines") or []) if ln and ln.strip()]
+                if candidate:
+                    lines = [f"{prefix}{candidate[0]}"] + candidate[1:]
+                    if all(len(ln) <= rule_formatter.MAX_LINE_CHARS for ln in lines):
+                        ai_results[(vi, si)] = lines
+        except Exception:
+            pass  # no key, or any AI/parsing failure -- mechanical fallback covers it
 
-    def safe_lines(candidate, prefix=""):
-        candidate = [ln.strip() for ln in (candidate or []) if ln and ln.strip()]
-        if not candidate:
-            return None
-        lines = [f"{prefix}{candidate[0]}"] + candidate[1:]
-        if all(len(ln) <= rule_formatter.MAX_LINE_CHARS for ln in lines):
-            return lines
-        return None
+    def segment_lines(i, j, seg, prefix):
+        two = rule_formatter.split_two_lines(seg, prefix=prefix)
+        if two is not None:
+            return two
+        return ai_results.get((i, j)) or rule_formatter.wrap_line(seg, prefix=prefix)
 
-    refrain_lines = rule_formatter.wrap_line(refrain) if refrain else None
+    refrain_blocks = []
+    if refrain:
+        for seg in refrain:
+            refrain_blocks.extend(rule_formatter.pair_lines(rule_formatter.segment_to_lines(seg)))
 
     blocks = []
-    for i, v in enumerate(verses, 1):
-        prefix = f"{i}. "
-        candidate = ai_verses[i - 1].get("lines") if i - 1 < len(ai_verses) else None
-        lines = safe_lines(candidate, prefix) or rule_formatter.wrap_line(v, prefix=prefix)
-        blocks.extend(rule_formatter.pair_lines(lines))
-        if refrain_lines:
-            blocks.extend(rule_formatter.pair_lines(refrain_lines))
+    for i, segments in enumerate(verses):
+        for j, seg in enumerate(segments):
+            prefix = f"{i + 1}. " if j == 0 else ""
+            blocks.extend(rule_formatter.pair_lines(segment_lines(i, j, seg, prefix)))
+        blocks.extend(refrain_blocks)
 
     return "\n\n".join(blocks)
 

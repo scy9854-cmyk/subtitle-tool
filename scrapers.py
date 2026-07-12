@@ -32,6 +32,10 @@ def fetch_hymn(number: int) -> dict:
     raw_lines = [ln.strip() for ln in body.get_text().split("\n")]
     raw_lines = [ln for ln in raw_lines if ln]
 
+    # Each verse/refrain is kept as a list of its original <br/>-separated
+    # segments rather than merged into one string: those original breaks are
+    # already natural, stable split points and are used as-is downstream
+    # instead of re-deriving break points from a re-flowed block of text.
     verses = []
     refrain = None
     current = None  # "verse" or "refrain" -- where a continuation line (no number/label) belongs
@@ -41,24 +45,24 @@ def fetch_hymn(number: int) -> dict:
             continue
         m = re.match(r"^(\d+)\.\s*(.+)$", line)
         if m:
-            verses.append(m.group(2).strip())
+            verses.append([m.group(2).strip()])
             current = "verse"
             continue
         m = re.match(r"^<?후렴>?\s*(.*)$", line)
         if m:
-            refrain = m.group(1).strip()
+            refrain = [m.group(1).strip()]
             current = "refrain"
             continue
         # continuation line: a verse/refrain often wraps onto a second <br/>-separated
         # line with no number or "후렴" marker of its own -- fold it onto whichever
         # verse/refrain is currently open instead of dropping it.
         if current == "verse" and verses:
-            verses[-1] = f"{verses[-1]} {line}".strip()
+            verses[-1].append(line)
         elif current == "refrain" and refrain is not None:
-            refrain = f"{refrain} {line}".strip()
+            refrain.append(line)
         elif not verses and not refrain:
             # hymn with a single unlabeled verse (e.g. no numbering, no refrain)
-            verses.append(line)
+            verses.append([line])
             current = "verse"
 
     if not verses:

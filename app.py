@@ -45,13 +45,12 @@ def api_hymn():
 
     try:
         hymn = scrapers.fetch_hymn(number)
-        try:
-            # AI picks natural word-order breaks; ai_formatter itself verifies
-            # every line against the character limit and silently falls back
-            # to the mechanical wrap per-verse if a break isn't safe.
-            result = ai_formatter.format_hymn(hymn["verses"], hymn["refrain"])
-        except RuntimeError:
-            result = rule_formatter.format_hymn_rule(hymn["verses"], hymn["refrain"])
+        # ai_formatter.format_hymn is self-contained: it only calls the AI for
+        # segments that don't fit a clean deterministic 2-line split, verifies
+        # every returned line against the character limit, and falls back to
+        # the mechanical wrap (no AI needed) for anything that fails or if
+        # there's no API key at all.
+        result = ai_formatter.format_hymn(hymn["verses"], hymn["refrain"])
         return jsonify({"title": hymn["title"], "result": result})
     except scrapers.ScrapeError as e:
         return jsonify({"error": str(e)}), 404
