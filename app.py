@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import anthropic
 from flask import Flask, jsonify, render_template, request, Response
 
 import ai_formatter
@@ -84,7 +85,7 @@ def api_ccm_lyrics():
         try:
             result = ai_formatter.format_ccm(track["title"], track["lyrics"])
             mode = "ai"
-        except RuntimeError:
+        except (RuntimeError, anthropic.APIError):
             result = rule_formatter.format_ccm_rule(track["lyrics"])
             mode = "rule"
         return jsonify({"title": track["title"], "result": result, "mode": mode})
@@ -111,6 +112,22 @@ def api_ad():
         return jsonify({"error": f"처리 중 오류가 발생했습니다: {e}"}), 500
 
 
+@app.post("/api/ad/text")
+def api_ad_text():
+    body = request.get_json(force=True)
+    text = (body.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "광고 텍스트를 붙여넣어주세요."}), 400
+
+    try:
+        result = rule_formatter.format_ad_rule(text)
+        if not result:
+            return jsonify({"error": '번호 형식("1 | 제목" 또는 "1. 제목")을 찾지 못했습니다.'}), 400
+        return jsonify({"result": result, "mode": "rule"})
+    except Exception as e:
+        return jsonify({"error": f"처리 중 오류가 발생했습니다: {e}"}), 500
+
+
 @app.post("/api/sermon")
 def api_sermon():
     body = request.get_json(force=True)
@@ -120,11 +137,13 @@ def api_sermon():
 
     try:
         result = ai_formatter.format_sermon(text)
-        return jsonify({"result": result, "mode": "ai"})
-    except RuntimeError as e:
-        return jsonify({"error": str(e)}), 500
+        mode = "ai"
+    except (RuntimeError, anthropic.APIError):
+        result = rule_formatter.format_sermon_rule(text)
+        mode = "rule"
     except Exception as e:
         return jsonify({"error": f"처리 중 오류가 발생했습니다: {e}"}), 500
+    return jsonify({"result": result, "mode": mode})
 
 
 @app.post("/api/bible")

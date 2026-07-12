@@ -52,15 +52,31 @@
   </section>
 
   <section id="tab-ad" class="tabPane">
-    <label>광고/공지 이미지 (번호 매겨진 항목이 여러 개 있어도 한 번에 인식합니다)</label>
-    <div id="adDropZone" class="dropZone" tabindex="0">
-      <img id="adPreview" style="display:none" alt="광고 이미지 미리보기">
-      <span id="adDropHint">여기를 클릭한 뒤 캡처한 이미지를 붙여넣기(Cmd+V)<br>또는 <a href="#" id="adFilePickLink">파일 선택</a></span>
-      <input type="file" id="adFileInput" accept="image/*" style="display:none">
+    <div class="tabs" style="margin-bottom:16px">
+      <button class="adModeBtn active" data-admode="image">이미지로 변환 (AI)</button>
+      <button class="adModeBtn" data-admode="text">텍스트로 변환 (AI 불필요)</button>
     </div>
-    <div class="row" style="margin-top:10px">
-      <button id="adGoBtn">텍스트로 변환</button>
+
+    <div id="adMode-image">
+      <label>광고/공지 이미지 (번호 매겨진 항목이 여러 개 있어도 한 번에 인식합니다)</label>
+      <div id="adDropZone" class="dropZone" tabindex="0">
+        <img id="adPreview" style="display:none" alt="광고 이미지 미리보기">
+        <span id="adDropHint">여기를 클릭한 뒤 캡처한 이미지를 붙여넣기(Cmd+V)<br>또는 <a href="#" id="adFilePickLink">파일 선택</a></span>
+        <input type="file" id="adFileInput" accept="image/*" style="display:none">
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="adGoBtn">텍스트로 변환</button>
+      </div>
     </div>
+
+    <div id="adMode-text" style="display:none">
+      <label>광고 원문 텍스트 (예: "1 | 환영인사" 또는 "1. 환영인사"로 시작하는 항목이 이어지는 형식)</label>
+      <textarea id="adTextInput" class="sermonInput" placeholder="주보 원본에서 광고 부분을 그대로 붙여넣으세요." spellcheck="false"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button id="adTextGoBtn">텍스트로 변환</button>
+      </div>
+    </div>
+
     <div class="status" id="adStatus"></div>
   </section>
 

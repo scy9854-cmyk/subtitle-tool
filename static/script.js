@@ -166,6 +166,31 @@ document.getElementById("adGoBtn").addEventListener("click", async () => {
   }
 });
 
+// Ad mode toggle (image/AI vs text/no-AI)
+document.querySelectorAll(".adModeBtn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".adModeBtn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("adMode-image").style.display = btn.dataset.admode === "image" ? "" : "none";
+    document.getElementById("adMode-text").style.display = btn.dataset.admode === "text" ? "" : "none";
+    setStatus("adStatus", "");
+  });
+});
+
+document.getElementById("adTextGoBtn").addEventListener("click", async () => {
+  const text = document.getElementById("adTextInput").value.trim();
+  if (!text) return setStatus("adStatus", "광고 텍스트를 붙여넣어주세요.");
+  setStatus("adStatus", "변환 중...", true);
+  resultArea.value = "";
+  try {
+    const data = await postJSON("/api/ad/text", { text });
+    resultArea.value = data.result;
+    setStatus("adStatus", "완료");
+  } catch (e) {
+    setStatus("adStatus", e.message);
+  }
+});
+
 // Sermon script
 document.getElementById("sermonGoBtn").addEventListener("click", async () => {
   const text = document.getElementById("sermonInput").value.trim();
@@ -175,7 +200,8 @@ document.getElementById("sermonGoBtn").addEventListener("click", async () => {
   try {
     const data = await postJSON("/api/sermon", { text });
     resultArea.value = data.result;
-    setStatus("sermonStatus", "완료");
+    const note = data.mode === "rule" ? " (⚠ API 키 없어 규칙 기반으로 생성됨 — #이미지 줄과 성경구절 인식은 그대로 되지만, 성경구절이 아닌 줄에 대한 별도 판단은 하지 않습니다)" : "";
+    setStatus("sermonStatus", `완료${note}`);
   } catch (e) {
     setStatus("sermonStatus", e.message);
   }

@@ -7,6 +7,14 @@ miss choruses whose wording varies slightly between repeats, and it cannot
 reliably detect a Bridge.
 """
 
+import re
+
+import formatters
+import scrapers
+from reference_parser import parse_reference
+
+_AD_HEADER_RE = re.compile(r"^(\d+)\s*[|.)]\s*(.+)$")
+
 
 MAX_LINE_CHARS = 20  # screen-calibrated hard ceiling: longer lines overflow the subtitle slide
 
@@ -210,3 +218,57 @@ def format_ccm_rule(lyrics: str) -> str:
 
     out_blocks = [f"{label}\n{group_lines(seg_lines)}" for label, seg_lines in segments]
     return "\n\n".join(out_blocks)
+
+
+def format_sermon_rule(raw_text: str) -> str:
+    """No AI: a line is either a bare Bible reference (regex-matched via
+    reference_parser, then expanded with the real scraped text -- same as
+    the AI path), a '#' image cue, or plain text, kept as-is either way."""
+    blocks = []
+    for line in raw_text.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        ref = parse_reference(line)
+        if ref:
+            try:
+                data = scrapers.fetch_bible(ref["book"], ref["chapter"], ref["start"], ref["end"])
+                blocks.append(formatters.format_bible(data))
+                continue
+            except scrapers.ScrapeError:
+                pass  # fall through to plain text below
+        blocks.append(line)
+    return "\n\n".join(blocks)
+
+
+def format_ad_rule(raw_text: str) -> str:
+    """No AI: pasted bulletin text where each item starts with a numbered
+    header like "1 | 환영인사" / "1. 환영인사" / "1) 환영인사". Everything
+    until the next header is that item's content, blank lines collapsed to
+    at most one (paragraph break) and trimmed at both ends."""
+    items = []
+    current = None
+    for raw_line in raw_text.split("\n"):
+        line = raw_line.strip()
+        m = _AD_HEADER_RE.match(line)
+        if m:
+            current = {"number": m.group(1), "title": m.group(2).strip(), "lines": []}
+            items.append(current)
+        elif current is not None:
+            current["lines"].append(line)
+
+    blocks = []
+    for item in items:
+        content_lines, prev_blank = [], True
+        for ln in item["lines"]:
+            if ln:
+                content_lines.append(ln)
+                prev_blank = False
+            elif not prev_blank:
+                content_lines.append("")
+                prev_blank = True
+        while content_lines and content_lines[-1] == "":
+            content_lines.pop()
+        content = "\n".join(content_lines)
+        blocks.append(f"{item['number']}. {item['title']}\n{content}".rstrip())
+    return "\n\n".join(blocks)
