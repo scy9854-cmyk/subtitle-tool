@@ -38,7 +38,7 @@ def wrap_line(text: str, max_chars: int = MAX_LINE_CHARS, prefix: str = "") -> l
     return lines
 
 
-def _pair_lines(lines: list) -> list:
+def pair_lines(lines: list) -> list:
     """Group already-wrapped lines two at a time (no re-merging -- they're already
     at the max width, so combining two would blow the per-line budget again)."""
     return ["\n".join(lines[i:i + 2]) for i in range(0, len(lines), 2)]
@@ -48,9 +48,9 @@ def format_hymn_rule(verses: list, refrain) -> str:
     blocks = []
     for i, v in enumerate(verses, 1):
         wrapped = wrap_line(v, prefix=f"{i}. ")
-        blocks.extend(_pair_lines(wrapped))
+        blocks.extend(pair_lines(wrapped))
         if refrain:
-            blocks.extend(_pair_lines(wrap_line(refrain)))
+            blocks.extend(pair_lines(wrap_line(refrain)))
     return "\n\n".join(blocks)
 
 

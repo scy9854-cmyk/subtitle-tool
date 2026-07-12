@@ -11,6 +11,36 @@ from bible_books import BOOKS
 
 MODEL = "claude-sonnet-5"
 
+HYMN_SYSTEM_PROMPT = """당신은 한국 교회의 예배 자막(이지워십) 담당자를 돕는 도우미입니다.
+찬송가 각 절을 자막 화면에 보기 좋게 여러 줄로 나눠주세요. split_hymn 도구를 호출해서 결과를 알려주세요.
+
+규칙:
+1. 자연스러운 어순/구절 단위로 줄을 나눕니다 — 조사나 어미, 의미 단위가 자연스럽게 끊기는 지점에서 나누고, 한 단어의 중간에서 끊지 않습니다.
+2. 한 줄은 공백 포함 15자를 최대치로 삼아서, 그 안에서 최대한 채워 넣으세요. 무조건 짧게 쪼개지 말고, 다음 의미 단위까지 넣었을 때 15자를 넘지 않는다면 최대한 붙이세요 — 너무 잦은 줄바꿈은 오히려 부자연스럽습니다.
+3. 원문 내용을 빠짐없이 그대로 옮기고, 단어를 추가하거나 빼지 마세요."""
+
+HYMN_TOOL = {
+    "name": "split_hymn",
+    "description": "각 절을 자연스러운 어순 단위의 여러 줄로 나눠 반환합니다.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "verses": {
+                "type": "array",
+                "description": "입력받은 절 순서와 개수를 그대로 따릅니다.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "lines": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "required": ["lines"],
+                },
+            },
+        },
+        "required": ["verses"],
+    },
+}
+
 CCM_SYSTEM_PROMPT = """당신은 한국 교회의 예배 자막(이지워십) 담당자를 돕는 도우미입니다.
 CCM 가사는 절 구분이 되어 있지 않은 경우가 많습니다. 주어진 원문 가사를 의미 단위로 분석해서
 Verse 1, Verse 2, Pre-Chorus, Chorus, Bridge, Outro 등 곡 구조를 판단하고,
@@ -135,6 +165,60 @@ def _client() -> anthropic.Anthropic:
             "ANTHROPIC_API_KEY가 설정되어 있지 않습니다. .env 파일에 키를 추가해주세요."
         )
     return anthropic.Anthropic(api_key=api_key)
+
+
+def format_hymn(verses: list, refrain) -> str:
+    """AI picks natural word-order breaks for each verse, but every resulting
+    line is verified to fit MAX_LINE_CHARS -- if the AI's split (or the call
+    itself) fails that check for a given verse, that verse falls back to the
+    deterministic mechanical wrap instead. A screen overflow must never reach
+    production. The refrain is always mechanically wrapped (unchanged, fixed
+    18-char width) since it's short enough that natural-break splitting adds
+    no value and only risks over-fragmenting it."""
+    user_content = "\n".join(f"{i}절: {v}" for i, v in enumerate(verses, 1))
+
+    ai_verses = []
+    try:
+        client = _client()
+        resp = client.messages.create(
+            model=MODEL,
+            max_tokens=4000,
+            system=HYMN_SYSTEM_PROMPT,
+            tools=[HYMN_TOOL],
+            tool_choice={"type": "tool", "name": "split_hymn"},
+            messages=[{"role": "user", "content": user_content}],
+        )
+        tool_use = next(b for b in resp.content if getattr(b, "type", None) == "tool_use")
+        data = tool_use.input
+        if isinstance(data, str):
+            data = json.loads(data)
+        ai_verses = data.get("verses") or []
+    except RuntimeError:
+        raise  # no API key -- let the caller fall back to rule_formatter entirely
+    except Exception:
+        pass  # any other AI/parsing failure -- proceed with mechanical wrap below
+
+    def safe_lines(candidate, prefix=""):
+        candidate = [ln.strip() for ln in (candidate or []) if ln and ln.strip()]
+        if not candidate:
+            return None
+        lines = [f"{prefix}{candidate[0]}"] + candidate[1:]
+        if all(len(ln) <= rule_formatter.MAX_LINE_CHARS for ln in lines):
+            return lines
+        return None
+
+    refrain_lines = rule_formatter.wrap_line(refrain) if refrain else None
+
+    blocks = []
+    for i, v in enumerate(verses, 1):
+        prefix = f"{i}. "
+        candidate = ai_verses[i - 1].get("lines") if i - 1 < len(ai_verses) else None
+        lines = safe_lines(candidate, prefix) or rule_formatter.wrap_line(v, prefix=prefix)
+        blocks.extend(rule_formatter.pair_lines(lines))
+        if refrain_lines:
+            blocks.extend(rule_formatter.pair_lines(refrain_lines))
+
+    return "\n\n".join(blocks)
 
 
 def format_ccm(title: str, lyrics: str) -> str:
