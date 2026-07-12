@@ -194,6 +194,7 @@ def format_hymn(verses: list, refrain) -> str:
         resp = client.messages.create(
             model=MODEL,
             max_tokens=4000,
+            thinking={"type": "disabled"},
             system=HYMN_SYSTEM_PROMPT,
             tools=[HYMN_TOOL],
             tool_choice={"type": "tool", "name": "split_hymn"},
@@ -247,6 +248,7 @@ def format_ccm(title: str, lyrics: str) -> str:
     resp = client.messages.create(
         model=MODEL,
         max_tokens=4000,
+        thinking={"type": "disabled"},
         system=CCM_SYSTEM_PROMPT,
         tools=[CCM_TOOL],
         tool_choice={"type": "tool", "name": "structure_lyrics"},
@@ -273,6 +275,7 @@ def format_ad(image_b64: str, media_type: str) -> str:
     resp = client.messages.create(
         model=MODEL,
         max_tokens=4000,
+        thinking={"type": "disabled"},
         system=AD_SYSTEM_PROMPT,
         tools=[AD_TOOL],
         tool_choice={"type": "tool", "name": "extract_announcements"},
@@ -310,6 +313,7 @@ def format_sermon(raw_text: str) -> str:
     resp = client.messages.create(
         model=MODEL,
         max_tokens=4000,
+        thinking={"type": "disabled"},
         system=system,
         tools=[SERMON_TOOL],
         tool_choice={"type": "tool", "name": "segment_sermon"},
