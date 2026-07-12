@@ -45,13 +45,10 @@ def api_hymn():
 
     try:
         hymn = scrapers.fetch_hymn(number)
-        try:
-            result = ai_formatter.format_hymn(hymn["title"], hymn["verses"], hymn["refrain"])
-            mode = "ai"
-        except RuntimeError:
-            result = rule_formatter.format_hymn_rule(hymn["verses"], hymn["refrain"])
-            mode = "rule"
-        return jsonify({"title": hymn["title"], "result": result, "mode": mode})
+        # deterministic on purpose: exact per-line character limits must never
+        # depend on an LLM's arithmetic for something shown live on screen.
+        result = rule_formatter.format_hymn_rule(hymn["verses"], hymn["refrain"])
+        return jsonify({"title": hymn["title"], "result": result})
     except scrapers.ScrapeError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:

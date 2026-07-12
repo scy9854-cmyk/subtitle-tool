@@ -1,40 +1,56 @@
 """Deterministic (non-AI) fallback formatters.
 
-Hymn splitting is a reasonable approximation (Korean hymnal verses are
-almost always printed as exactly two lines). CCM structure labeling is a
-best-effort heuristic based on exact repeated line-blocks, so it can miss
-choruses whose wording varies slightly between repeats, and it cannot
+Hymn verses are word-wrapped to a fixed max characters per line (screen
+readability limit) and grouped two lines at a time. CCM structure labeling
+is a best-effort heuristic based on exact repeated line-blocks, so it can
+miss choruses whose wording varies slightly between repeats, and it cannot
 reliably detect a Bridge.
 """
 
 
-def split_two_lines(text: str):
+MAX_LINE_CHARS = 18  # screen-calibrated: longer lines overflow the subtitle slide
+
+
+def wrap_line(text: str, max_chars: int = MAX_LINE_CHARS, prefix: str = "") -> list:
+    """Greedily pack words onto lines of at most max_chars (never splits a word).
+
+    If prefix is given, it's prepended to the first output line and its length
+    is deducted from that first line's budget so the prefix itself never pushes
+    the line over max_chars.
+    """
     words = text.split()
-    if len(words) <= 1:
-        return text, ""
+    lines = []
+    current, current_len = [], 0
+    budget = max_chars - len(prefix)
+    for w in words:
+        add_len = len(w) + (1 if current else 0)
+        if current and current_len + add_len > budget:
+            lines.append(" ".join(current))
+            current, current_len = [w], len(w)
+            budget = max_chars
+        else:
+            current.append(w)
+            current_len += add_len
+    if current:
+        lines.append(" ".join(current))
+    if lines and prefix:
+        lines[0] = f"{prefix}{lines[0]}"
+    return lines
 
-    lengths = [len(w) for w in words]
-    total = sum(lengths) + (len(words) - 1)
 
-    best_i, best_diff = 1, float("inf")
-    for i in range(1, len(words)):
-        left = sum(lengths[:i]) + (i - 1)
-        diff = abs(left - (total - left))
-        if diff < best_diff:
-            best_diff = diff
-            best_i = i
-
-    return " ".join(words[:best_i]), " ".join(words[best_i:])
+def _pair_lines(lines: list) -> list:
+    """Group already-wrapped lines two at a time (no re-merging -- they're already
+    at the max width, so combining two would blow the per-line budget again)."""
+    return ["\n".join(lines[i:i + 2]) for i in range(0, len(lines), 2)]
 
 
 def format_hymn_rule(verses: list, refrain) -> str:
     blocks = []
     for i, v in enumerate(verses, 1):
-        l1, l2 = split_two_lines(v)
-        blocks.append(f"{i}. {l1}" + (f"\n{l2}" if l2 else ""))
+        wrapped = wrap_line(v, prefix=f"{i}. ")
+        blocks.extend(_pair_lines(wrapped))
         if refrain:
-            r1, r2 = split_two_lines(refrain)
-            blocks.append(r1 + (f"\n{r2}" if r2 else ""))
+            blocks.extend(_pair_lines(wrap_line(refrain)))
     return "\n\n".join(blocks)
 
 

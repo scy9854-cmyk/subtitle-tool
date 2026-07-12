@@ -30,13 +30,12 @@ async function postJSON(url, payload) {
 document.getElementById("hymnGoBtn").addEventListener("click", async () => {
   const number = document.getElementById("hymnNumber").value;
   if (!number) return setStatus("hymnStatus", "장 번호를 입력해주세요.");
-  setStatus("hymnStatus", "가져오는 중... (AI 편집에는 몇 초 걸릴 수 있습니다)", true);
+  setStatus("hymnStatus", "가져오는 중...", true);
   resultArea.value = "";
   try {
     const data = await postJSON("/api/hymn", { number });
     resultArea.value = data.result;
-    const note = data.mode === "rule" ? " (⚠ API 키 없어 규칙 기반으로 생성됨, 부정확할 수 있음)" : "";
-    setStatus("hymnStatus", `완료: ${data.title}${note}`);
+    setStatus("hymnStatus", `완료: ${data.title}`);
   } catch (e) {
     setStatus("hymnStatus", e.message);
   }

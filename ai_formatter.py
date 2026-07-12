@@ -11,17 +11,6 @@ from bible_books import BOOKS
 
 MODEL = "claude-sonnet-5"
 
-HYMN_SYSTEM_PROMPT = """당신은 한국 교회의 예배 자막(이지워십) 담당자를 돕는 도우미입니다.
-찬송가 가사를 아래 규칙에 따라 정확히 다듬어 출력하세요.
-
-규칙:
-1. 가사를 화면에 2줄씩 보기 좋게 나눕니다. 한 번에 표시되는 2줄 묶음은 의미가 자연스럽게 끊기는 지점으로 나눕니다.
-2. 2줄 묶음과 그 다음 2줄 묶음 사이에는 빈 줄을 하나 넣어 구분합니다.
-3. 절이 여러 개면, 각 절이 끝날 때마다 후렴을 그대로(동일하게) 반복해서 넣습니다. 후렴도 2줄 단위로 나누고 빈 줄로 구분합니다. 즉 "1절 → 후렴 → 2절 → 후렴 → 3절 → 후렴..." 순서입니다.
-4. 각 절의 첫 줄 맨 앞에 "1. ", "2. ", "3. "처럼 절 번호를 붙입니다(예: "1. 험한 시험 물 속에서 나를 건져주시고"). 그 절의 둘째 줄에는 번호를 붙이지 않습니다. 후렴에는 번호나 "후렴"이라는 라벨을 붙이지 않고 가사만 씁니다.
-5. "아멘"이 원문에 있으면 그 절(혹은 후렴) 뒤에 별도의 한 줄로 유지합니다.
-6. 다른 설명, 머리말, 코드블록 없이 결과 텍스트만 출력합니다."""
-
 CCM_SYSTEM_PROMPT = """당신은 한국 교회의 예배 자막(이지워십) 담당자를 돕는 도우미입니다.
 CCM 가사는 절 구분이 되어 있지 않은 경우가 많습니다. 주어진 원문 가사를 의미 단위로 분석해서
 Verse 1, Verse 2, Pre-Chorus, Chorus, Bridge, Outro 등 곡 구조를 판단하고,
@@ -139,11 +128,6 @@ SERMON_TOOL = {
 }
 
 
-def _extract_text(resp) -> str:
-    parts = [block.text for block in resp.content if getattr(block, "type", None) == "text"]
-    return "".join(parts).strip()
-
-
 def _client() -> anthropic.Anthropic:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -151,24 +135,6 @@ def _client() -> anthropic.Anthropic:
             "ANTHROPIC_API_KEY가 설정되어 있지 않습니다. .env 파일에 키를 추가해주세요."
         )
     return anthropic.Anthropic(api_key=api_key)
-
-
-def format_hymn(title: str, verses: list, refrain: str | None) -> str:
-    lines = [f"[{title}]"]
-    for i, v in enumerate(verses, 1):
-        lines.append(f"{i}절: {v}")
-    if refrain:
-        lines.append(f"후렴: {refrain}")
-    user_content = "\n".join(lines)
-
-    client = _client()
-    resp = client.messages.create(
-        model=MODEL,
-        max_tokens=4000,
-        system=HYMN_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_content}],
-    )
-    return _extract_text(resp)
 
 
 def format_ccm(title: str, lyrics: str) -> str:
