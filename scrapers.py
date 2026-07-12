@@ -34,20 +34,32 @@ def fetch_hymn(number: int) -> dict:
 
     verses = []
     refrain = None
+    current = None  # "verse" or "refrain" -- where a continuation line (no number/label) belongs
     for line in raw_lines:
         if line == "아멘":
+            current = None
             continue
         m = re.match(r"^(\d+)\.\s*(.+)$", line)
         if m:
             verses.append(m.group(2).strip())
+            current = "verse"
             continue
         m = re.match(r"^<?후렴>?\s*(.*)$", line)
         if m:
             refrain = m.group(1).strip()
+            current = "refrain"
             continue
-        # hymn with a single unlabeled verse (e.g. no numbering, no refrain)
-        if not verses and not refrain:
+        # continuation line: a verse/refrain often wraps onto a second <br/>-separated
+        # line with no number or "후렴" marker of its own -- fold it onto whichever
+        # verse/refrain is currently open instead of dropping it.
+        if current == "verse" and verses:
+            verses[-1] = f"{verses[-1]} {line}".strip()
+        elif current == "refrain" and refrain is not None:
+            refrain = f"{refrain} {line}".strip()
+        elif not verses and not refrain:
+            # hymn with a single unlabeled verse (e.g. no numbering, no refrain)
             verses.append(line)
+            current = "verse"
 
     if not verses:
         raise ScrapeError(f"{number}장 가사를 파싱하지 못했습니다.")
