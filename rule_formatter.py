@@ -1,10 +1,10 @@
 """Deterministic (non-AI) fallback formatters.
 
-Hymn verses are word-wrapped to a fixed max characters per line (screen
-readability limit) and grouped two lines at a time. CCM structure labeling
-is a best-effort heuristic based on exact repeated line-blocks, so it can
-miss choruses whose wording varies slightly between repeats, and it cannot
-reliably detect a Bridge.
+Hymn verses are split into exactly two lines at the most balanced word
+boundary, no character limit -- the source's own line is the unit, not a
+screen-width budget. CCM structure labeling is a best-effort heuristic
+based on exact repeated line-blocks, so it can miss choruses whose wording
+varies slightly between repeats, and it cannot reliably detect a Bridge.
 """
 
 import re
@@ -16,20 +16,14 @@ from reference_parser import parse_reference
 _AD_HEADER_RE = re.compile(r"^(\d+)\s*[|.)]\s*(.+)$")
 
 
-MAX_LINE_CHARS = 20  # screen-calibrated hard ceiling: longer lines overflow the subtitle slide
-
-
-def split_two_lines(text: str, prefix: str = "", max_chars: int = MAX_LINE_CHARS):
-    """Balance-split text into exactly two lines at the best word boundary.
-    Returns None if even the best balance point leaves a line over max_chars
-    -- the caller should fall back to wrap_line (possibly multiple groups)
-    for text that doesn't comfortably fit in two lines."""
+def split_two_lines(text: str, prefix: str = "") -> list:
+    """Split text into exactly two lines at the most balanced word boundary
+    (no length limit -- always succeeds as long as text has content)."""
     words = text.split()
     if not words:
-        return None
+        return []
     if len(words) == 1:
-        line = f"{prefix}{words[0]}"
-        return [line] if len(line) <= max_chars else None
+        return [f"{prefix}{words[0]}"]
 
     lengths = [len(w) for w in words]
     plen = len(prefix)
@@ -43,50 +37,18 @@ def split_two_lines(text: str, prefix: str = "", max_chars: int = MAX_LINE_CHARS
 
     line1 = f"{prefix}{' '.join(words[:best_i])}"
     line2 = " ".join(words[best_i:])
-    if len(line1) <= max_chars and len(line2) <= max_chars:
-        return [line1, line2]
-    return None
-
-
-def wrap_line(text: str, max_chars: int = MAX_LINE_CHARS, prefix: str = "") -> list:
-    """Greedily pack words onto lines of at most max_chars (never splits a word).
-
-    If prefix is given, it's prepended to the first output line and its length
-    is deducted from that first line's budget so the prefix itself never pushes
-    the line over max_chars.
-    """
-    words = text.split()
-    lines = []
-    current, current_len = [], 0
-    budget = max_chars - len(prefix)
-    for w in words:
-        add_len = len(w) + (1 if current else 0)
-        if current and current_len + add_len > budget:
-            lines.append(" ".join(current))
-            current, current_len = [w], len(w)
-            budget = max_chars
-        else:
-            current.append(w)
-            current_len += add_len
-    if current:
-        lines.append(" ".join(current))
-    if lines and prefix:
-        lines[0] = f"{prefix}{lines[0]}"
-    return lines
+    return [line1, line2]
 
 
 def pair_lines(lines: list) -> list:
-    """Group already-wrapped lines two at a time (no re-merging -- they're already
-    at the max width, so combining two would blow the per-line budget again)."""
+    """Group already-wrapped lines two at a time."""
     return ["\n".join(lines[i:i + 2]) for i in range(0, len(lines), 2)]
 
 
 def segment_to_lines(seg: str, prefix: str = "") -> list:
     """A natural segment (one of the hymn site's own <br/>-separated pieces)
-    is kept to exactly two lines whenever that fits within SEGMENT_SOFT_MAX;
-    only a segment too long for a clean 2-line split falls back to the
-    stricter multi-line hard wrap."""
-    return split_two_lines(seg, prefix=prefix) or wrap_line(seg, prefix=prefix)
+    becomes exactly two lines, split at the most balanced word boundary."""
+    return split_two_lines(seg, prefix=prefix)
 
 
 def format_hymn_rule(verses: list, refrain) -> str:

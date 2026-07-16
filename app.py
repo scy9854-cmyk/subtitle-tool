@@ -56,12 +56,9 @@ def api_hymn():
 
     try:
         hymn = scrapers.fetch_hymn(number)
-        # ai_formatter.format_hymn is self-contained: it only calls the AI for
-        # segments that don't fit a clean deterministic 2-line split, verifies
-        # every returned line against the character limit, and falls back to
-        # the mechanical wrap (no AI needed) for anything that fails or if
-        # there's no API key at all.
-        result = ai_formatter.format_hymn(hymn["verses"], hymn["refrain"])
+        # Fully deterministic: every segment splits into exactly two lines
+        # at the most balanced word boundary, no AI needed.
+        result = rule_formatter.format_hymn_rule(hymn["verses"], hymn["refrain"])
         return jsonify({"title": hymn["title"], "result": result})
     except scrapers.ScrapeError as e:
         return jsonify({"error": str(e)}), 404

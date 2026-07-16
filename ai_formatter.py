@@ -11,36 +11,6 @@ from bible_books import BOOKS
 
 MODEL = "claude-sonnet-5"
 
-HYMN_SYSTEM_PROMPT = """당신은 한국 교회의 예배 자막(이지워십) 담당자를 돕는 도우미입니다.
-찬송가 각 절을 자막 화면에 보기 좋게 여러 줄로 나눠주세요. split_hymn 도구를 호출해서 결과를 알려주세요.
-
-규칙:
-1. 자연스러운 어순/구절 단위로 줄을 나눕니다 — 조사나 어미, 의미 단위가 자연스럽게 끊기는 지점에서 나누고, 한 단어의 중간에서 끊지 않습니다.
-2. 한 줄은 공백 포함 20자를 넘지 않게 하되, 15자 안팎을 목표로 삼으세요. 무조건 짧게 쪼개지 말고, 다음 의미 단위까지 넣었을 때 20자를 넘지 않는다면 최대한 붙이세요 — 너무 잦은 줄바꿈은 오히려 부자연스럽습니다.
-3. 원문 내용을 빠짐없이 그대로 옮기고, 단어를 추가하거나 빼지 마세요."""
-
-HYMN_TOOL = {
-    "name": "split_hymn",
-    "description": "각 절을 자연스러운 어순 단위의 여러 줄로 나눠 반환합니다.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "verses": {
-                "type": "array",
-                "description": "입력받은 절 순서와 개수를 그대로 따릅니다.",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "lines": {"type": "array", "items": {"type": "string"}},
-                    },
-                    "required": ["lines"],
-                },
-            },
-        },
-        "required": ["verses"],
-    },
-}
-
 CCM_SYSTEM_PROMPT = """당신은 한국 교회의 예배 자막(이지워십) 담당자를 돕는 도우미입니다.
 CCM 가사는 절 구분이 되어 있지 않은 경우가 많습니다. 주어진 원문 가사를 의미 단위로 분석해서
 Verse 1, Verse 2, Pre-Chorus, Chorus, Bridge, Outro 등 곡 구조를 판단하고,
@@ -165,80 +135,6 @@ def _client() -> anthropic.Anthropic:
             "ANTHROPIC_API_KEY가 설정되어 있지 않습니다. .env 파일에 키를 추가해주세요."
         )
     return anthropic.Anthropic(api_key=api_key)
-
-
-def format_hymn(verses: list, refrain) -> str:
-    """Each verse (and the refrain) is a list of the hymn site's own natural
-    <br/>-separated segments. A pure character-balance split can land on a
-    grammatically awkward break (e.g. splitting "팔에 / 안기세" apart) even
-    when it's well within the length limit, so every segment -- verse and
-    refrain alike -- is sent to the AI for a natural word-order split in one
-    batched call. Each returned line is re-verified against MAX_LINE_CHARS;
-    any segment that fails validation, or any failure of the AI call itself,
-    falls back to the deterministic balance/wrap split for that segment only."""
-    # (kind, verse_idx, seg_idx, text, prefix) -- one entry per natural segment,
-    # verse and refrain segments flattened into a single ordered list for one AI call.
-    segments = []
-    for i, segs in enumerate(verses):
-        for j, seg in enumerate(segs):
-            prefix = f"{i + 1}. " if j == 0 else ""
-            segments.append(("verse", i, j, seg, prefix))
-    if refrain:
-        for j, seg in enumerate(refrain):
-            segments.append(("refrain", None, j, seg, ""))
-
-    ai_results = {}
-    try:
-        client = _client()
-        user_content = "\n".join(f"{idx}: {text}" for idx, (_, _, _, text, _) in enumerate(segments))
-        resp = client.messages.create(
-            model=MODEL,
-            max_tokens=4000,
-            thinking={"type": "disabled"},
-            system=HYMN_SYSTEM_PROMPT,
-            tools=[HYMN_TOOL],
-            tool_choice={"type": "tool", "name": "split_hymn"},
-            messages=[{"role": "user", "content": user_content}],
-        )
-        tool_use = next(b for b in resp.content if getattr(b, "type", None) == "tool_use")
-        data = tool_use.input
-        if isinstance(data, str):
-            data = json.loads(data)
-        ai_list = data.get("verses") or []
-        for idx, item in enumerate(ai_list):
-            if idx >= len(segments):
-                break
-            _, _, _, _, prefix = segments[idx]
-            candidate = [ln.strip() for ln in (item.get("lines") or []) if ln and ln.strip()]
-            if candidate:
-                lines = [f"{prefix}{candidate[0]}"] + candidate[1:]
-                if all(len(ln) <= rule_formatter.MAX_LINE_CHARS for ln in lines):
-                    ai_results[idx] = lines
-    except Exception:
-        pass  # no key, or any AI/parsing failure -- mechanical fallback covers every segment
-
-    verse_blocks = {}
-    refrain_blocks = []
-    for idx, (kind, vi, si, seg, prefix) in enumerate(segments):
-        mechanical = rule_formatter.split_two_lines(seg, prefix=prefix) or rule_formatter.wrap_line(seg, prefix=prefix)
-        ai_lines = ai_results.get(idx)
-        # only prefer the AI's break points when they don't fragment the
-        # segment into more lines than the deterministic packing would --
-        # a "natural" split that uses more, shorter lines than necessary is
-        # exactly the over-fragmentation this whole thing is meant to avoid.
-        lines = ai_lines if ai_lines and len(ai_lines) <= len(mechanical) else mechanical
-        groups = rule_formatter.pair_lines(lines)
-        if kind == "verse":
-            verse_blocks.setdefault(vi, []).extend(groups)
-        else:
-            refrain_blocks.extend(groups)
-
-    blocks = []
-    for i in range(len(verses)):
-        blocks.extend(verse_blocks.get(i, []))
-        blocks.extend(refrain_blocks)
-
-    return "\n\n".join(blocks)
 
 
 def format_ccm(title: str, lyrics: str) -> str:
