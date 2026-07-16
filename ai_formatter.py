@@ -263,7 +263,7 @@ def format_ccm(title: str, lyrics: str) -> str:
         sections = parsed.get("sections", parsed) if isinstance(parsed, dict) else parsed
 
     blocks = [
-        f"{sec['label']}\n{rule_formatter.group_lines(sec['lines'])}"
+        f"{sec['label']}\n" + "\n".join(ln.strip() for ln in sec["lines"] if ln.strip())
         for sec in sections
         if sec.get("lines")
     ]

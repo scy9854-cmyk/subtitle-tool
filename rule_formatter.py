@@ -106,117 +106,117 @@ def format_hymn_rule(verses: list, refrain) -> str:
     return "\n\n".join(blocks)
 
 
-def _find_chorus_block(lines: list):
+def _label_paragraphs(paragraphs: list) -> list:
+    """paragraphs -> [(label, lines)]. A paragraph that reappears verbatim
+    later is the Chorus (included once, at its first occurrence); everything
+    else is a Verse in order, except a short unique trailing paragraph after
+    a Chorus, which is called a Bridge."""
+    chorus = next((p for i, p in enumerate(paragraphs) if p in paragraphs[i + 1:]), None)
+
+    segments = []
+    seen = set()
+    verse_count = 0
+    chorus_included = False
+    for idx, para in enumerate(paragraphs):
+        if chorus is not None and para == chorus:
+            if not chorus_included:
+                segments.append(("Chorus", para))
+                chorus_included = True
+            continue
+        key = tuple(para)
+        if key in seen:
+            continue
+        seen.add(key)
+        is_last = idx == len(paragraphs) - 1
+        if is_last and len(para) <= 4 and chorus_included and verse_count >= 1:
+            segments.append(("Bridge", para))
+        else:
+            verse_count += 1
+            segments.append((f"Verse {verse_count}", para))
+    return segments
+
+
+def _minimal_period(block: list) -> list:
+    """If block is itself just a smaller pattern repeated back-to-back
+    (e.g. the chorus sung 3x in a row got matched as one 12-line block),
+    reduce it to that smallest repeating unit."""
+    n = len(block)
+    for d in range(1, n):
+        if n % d == 0 and all(block[i] == block[i % d] for i in range(n)):
+            return block[:d]
+    return block
+
+
+def _find_repeated_block(lines: list):
+    """Sliding-window search for the largest exact-repeated run of lines --
+    used when the source has no blank-line stanza breaks at all, so there's
+    no paragraph structure to split on in the first place."""
     n = len(lines)
-    max_size = min(12, n // 2)
-    for size in range(max_size, 1, -1):
+    for size in range(min(12, n // 2), 1, -1):
         seen = {}
         for start in range(n - size + 1):
             block = tuple(lines[start:start + size])
             if block in seen:
-                return list(block), size
+                block = _minimal_period(list(block))
+                return block, len(block)
             seen[block] = start
     return None, 0
 
 
-def _find_occurrences(lines: list, block: list):
-    size = len(block)
-    n = len(lines)
-    starts = []
-    i = 0
+def _paragraphs_from_flat_lines(lines: list) -> list:
+    block, size = _find_repeated_block(lines)
+    if not block:
+        return [lines] if lines else []
+
+    starts = set()
+    i, n = 0, len(lines)
     while i <= n - size:
         if lines[i:i + size] == block:
-            starts.append(i)
+            starts.add(i)
             i += size
         else:
             i += 1
-    return starts
 
-
-def group_lines(lines: list) -> str:
-    """Join a section's raw lyric lines into 2-line groups separated by a blank line.
-
-    Raw lines are never split, only merged: if a section has an odd number of
-    lines, exactly one adjacent pair is joined onto a single display line —
-    whichever adjacent pair keeps the two resulting lines closest in length —
-    so a leftover line never ends up alone in its own tiny group.
-    """
-    lines = [ln for ln in lines if ln.strip()]
-    n = len(lines)
-    if n == 0:
-        return ""
-
-    if n % 2 == 1 and n > 1:
-        best_seq, best_score = lines, None
-        for i in range(n - 1):
-            merged = f"{lines[i]} {lines[i + 1]}"
-            seq = lines[:i] + [merged] + lines[i + 2:]
-            pairs = [(seq[j], seq[j + 1]) for j in range(0, len(seq), 2)]
-            score = sum(abs(len(a) - len(b)) for a, b in pairs)
-            if best_score is None or score < best_score:
-                best_score, best_seq = score, seq
-        lines = best_seq
-
-    if len(lines) % 2 == 0:
-        groups = ["\n".join(lines[i:i + 2]) for i in range(0, len(lines), 2)]
-    else:
-        groups = ["\n".join(lines[i:i + 2]) if i + 1 < len(lines) else lines[i]
-                   for i in range(0, len(lines), 2)]
-    return "\n\n".join(groups)
+    paragraphs, buf, i = [], [], 0
+    while i < n:
+        if i in starts:
+            if buf:
+                paragraphs.append(buf)
+                buf = []
+            paragraphs.append(lines[i:i + size])
+            i += size
+        else:
+            buf.append(lines[i])
+            i += 1
+    if buf:
+        paragraphs.append(buf)
+    return paragraphs
 
 
 def format_ccm_rule(lyrics: str) -> str:
     """Each unique section (Verse/Chorus/Bridge) is emitted only once, even if
     it repeats several times in the song, since this is a subtitle source and
-    a repeated section reuses the same slide."""
-    lines = [ln.strip() for ln in lyrics.split("\n") if ln.strip()]
-    chorus_block, size = _find_chorus_block(lines)
+    a repeated section reuses the same slide.
 
-    segments = []
-    seen_blocks = set()
-    verse_count = 0
+    Section boundaries come straight from the source's own blank-line
+    stanza breaks where they exist (Bugs Music lyrics are usually laid out
+    this way). Some songs' lyrics have none at all, though -- in that case
+    fall back to finding the largest exact-repeated run of lines (the
+    Chorus) and treat the stretches between its occurrences as paragraphs."""
+    paragraphs = []
+    for para in re.split(r"\n\s*\n", lyrics.strip()):
+        para_lines = [ln.strip() for ln in para.split("\n") if ln.strip()]
+        if para_lines:
+            paragraphs.append(para_lines)
 
-    def flush_verse(buf):
-        nonlocal verse_count
-        key = tuple(buf)
-        if not buf or key in seen_blocks:
-            return
-        seen_blocks.add(key)
-        verse_count += 1
-        segments.append((f"Verse {verse_count}", buf))
+    if len(paragraphs) <= 1:
+        flat_lines = [ln.strip() for ln in lyrics.split("\n") if ln.strip()]
+        paragraphs = _paragraphs_from_flat_lines(flat_lines)
+    if not paragraphs:
+        return ""
 
-    if chorus_block:
-        starts = set(_find_occurrences(lines, chorus_block))
-        chorus_included = False
-        verse_buffer = []
-        i, n = 0, len(lines)
-        while i < n:
-            if i in starts:
-                flush_verse(verse_buffer)
-                verse_buffer = []
-                if not chorus_included:
-                    segments.append(("Chorus", lines[i:i + size]))
-                    seen_blocks.add(tuple(lines[i:i + size]))
-                    chorus_included = True
-                i += size
-            else:
-                verse_buffer.append(lines[i])
-                i += 1
-
-        key = tuple(verse_buffer)
-        if verse_buffer and key not in seen_blocks:
-            has_chorus = any(label == "Chorus" for label, _ in segments)
-            if len(verse_buffer) <= 4 and has_chorus:
-                seen_blocks.add(key)
-                segments.append(("Bridge", verse_buffer))
-            else:
-                flush_verse(verse_buffer)
-    else:
-        chunk = 4
-        for idx in range(0, len(lines), chunk):
-            flush_verse(lines[idx:idx + chunk])
-
-    out_blocks = [f"{label}\n{group_lines(seg_lines)}" for label, seg_lines in segments]
+    segments = _label_paragraphs(paragraphs)
+    out_blocks = [f"{label}\n" + "\n".join(seg_lines) for label, seg_lines in segments]
     return "\n\n".join(out_blocks)
 
 
