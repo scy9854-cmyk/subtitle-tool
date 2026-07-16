@@ -39,6 +39,15 @@ h1 { font-size: 22px; margin: 0 0 4px; }
 .tabPane.active { display: block; }
 
 label { font-size: 13px; color: #6e6e73; display: block; margin-bottom: 8px; }
+.notice {
+  font-size: 13px;
+  color: #9a6b00;
+  background: #fff8e6;
+  border: 1px solid #f2dfa0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0 0 14px;
+}
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 input, select {
   padding: 10px 12px;
